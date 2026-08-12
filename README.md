@@ -105,14 +105,8 @@ work, and vote where applicable:
 
 Support development on Ko-fi:
 
-<https://ko-fi.com/emporeo>
+<script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#72a4f2', 'Y2B124KN37');kofiwidget2.draw();</script>
 
-## Versioning
-
-The VERSION file is the single source of truth for the MRMMR application
-version. Update that file, then run npm run sync-version before committing or
-publishing a release. The script synchronizes the package, Tauri, and Cargo
-metadata. Normal npm build and npm run tauri commands also synchronize it
 automatically.
 
 ## Source visibility and licensing
