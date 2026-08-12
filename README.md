@@ -2,6 +2,10 @@
 
 ## Marvel Rivals Mod Manager Redux
 
+<a href="https://ko-fi.com/emporeo">
+    <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Donate on Ko-fi" width="350">
+</a>
+
 MRMMR is a modern, lightweight desktop mod manager dedicated to Marvel
 Rivals. It provides an organized workshop, verified installations, readable
 asset conflict reports, and local tools for maintaining a modded game
@@ -105,9 +109,7 @@ work, and vote where applicable:
 
 Support development on Ko-fi:
 
-<script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script><script type='text/javascript'>kofiwidget2.init('Support me on Ko-fi', '#72a4f2', 'Y2B124KN37');kofiwidget2.draw();</script>
-
-automatically.
+<https://ko-fi.com/emporeo>
 
 ## Source visibility and licensing
 
