@@ -1,0 +1,46 @@
+[package]
+name = "mrmmr"
+version = "0.6.1"
+description = "Marvel Rivals Mod Manager Redux"
+authors = ["emporeo"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "mrmmr_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
+windows = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+winreg = "0.55"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sevenz-rust = { version = "0.6", default-features = false }
+unrar = "0.5"
+tar = "0.4"
+flate2 = "1"
+md-5 = "0.10"
+repak = { git = "https://github.com/natimerry/repak-rivals", rev = "b2a0a4535e1b5923b03619cd13bcb5bc9195c747", default-features = false, features = ["encryption"] }
+retoc = { git = "https://github.com/natimerry/repak-rivals", rev = "b2a0a4535e1b5923b03619cd13bcb5bc9195c747", package = "retoc", default-features = false }
+
+[patch."https://github.com/trumank/meatloaf.git"]
+ue_reflection = { git = "https://github.com/Archengius/meatloaf", rev = "0c6be9459ade5f4baa0028123fb5ccf22c4a0206" }
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

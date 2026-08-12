@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://www.nexusmods.com/*" },
+        { "url": "https://next.nexusmods.com/*" },
+        { "url": "https://ko-fi.com/emporeo*" },
+        { "url": "https://github.com/emporeoo*"}
+      ]
+    },
+    "dialog:allow-open",
+    "dialog:allow-save"
+  ]
+}

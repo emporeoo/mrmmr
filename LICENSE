@@ -1,0 +1,70 @@
+MRMMR SOURCE-VISIBLE PROPRIETARY LICENSE
+
+Copyright (c) 2026 emporeo. All rights reserved.
+
+This license applies to the MRMMR source code, documentation, application
+interface, original artwork, icons, branding, and creator-authored release
+materials (collectively, the "Software"), except where a separate notice says
+that a component is provided under another license.
+
+1. Source visibility
+
+The source code is published so users, moderators, security reviewers, and
+community members can inspect how MRMMR works. Making the source visible does
+not make MRMMR open source and does not grant permission to reuse the source.
+
+2. Permission to use official releases
+
+You may download and run an official, unmodified MRMMR release for your own
+personal, non-commercial use. Official releases may be distributed by the
+copyright holder through designated official channels, including the official
+GitHub repository and official Nexus Mods listing.
+
+3. Restrictions
+
+Without prior written permission from emporeo, you may not:
+
+* Copy, mirror, host, publish, or redistribute the Software or any part of it.
+* Sell, rent, sublicense, or bundle the Software with another product.
+* Modify, adapt, translate, rebrand, or create derivative works from the
+  Software.
+* Compile modified versions or distribute modified binaries.
+* Reuse the source, design, assets, code, or implementation details in another
+  application or mod manager.
+* Remove copyright, license, attribution, or security notices.
+* Use MRMMR branding, name, icons, or trademarks to imply endorsement or
+  affiliation.
+
+Linking to an official download page is permitted. Rehosting or uploading an
+official release to another download service is not permitted without written
+permission.
+
+4. Contributions
+
+Pull requests, patches, translations, assets, and other contributions require
+prior written approval from emporeo. A contribution does not grant permission
+to redistribute or relicense MRMMR.
+
+5. Third-party components
+
+This license covers only creator-authored MRMMR material. Third-party
+libraries, tools, and assets remain under their respective licenses and
+notices. Nothing in this license removes rights granted by those licenses.
+
+6. Legal limitations
+
+You may exercise rights that cannot lawfully be restricted in your
+jurisdiction. Nothing in this license grants permission to bypass technical
+protections or to use the Software for unlawful activity.
+
+7. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW,
+EMPOREO SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR
+CONSEQUENTIAL LOSS ARISING FROM THE USE OF THE SOFTWARE.
+
+MRMMR is an independent community project and is not affiliated with,
+endorsed by, or sponsored by Marvel, NetEase, Valve, Epic Games, or Nexus
+Mods. Marvel Rivals and related marks belong to their respective owners.
