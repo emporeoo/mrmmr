@@ -12,6 +12,7 @@ type NexusSsoErrorKind =
   | "sso_connection"
   | "sso_rejected"
   | "sso_timeout"
+  | "sso_cancelled"
 
 export class NexusSsoError extends Error {
   readonly kind: NexusSsoErrorKind
@@ -54,7 +55,7 @@ function authorizationUrl(requestId: string): string {
  * and is passed directly to the Rust backend for validation and encrypted
  * storage.
  */
-export function requestNexusSsoCredential(): Promise<string> {
+export function requestNexusSsoCredential(signal?: AbortSignal): Promise<string> {
   if (!isNexusSsoConfigured()) {
     return Promise.reject(
       new NexusSsoError(
@@ -64,10 +65,23 @@ export function requestNexusSsoCredential(): Promise<string> {
     )
   }
 
+  if (signal?.aborted) {
+    return Promise.reject(
+      new NexusSsoError("sso_cancelled", "Nexus Mods authorization was cancelled."),
+    )
+  }
+
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID()
     const socket = new WebSocket(NEXUS_SSO_SOCKET_URL)
     let settled = false
+
+    function cancel() {
+      if (settled) return
+      fail(new NexusSsoError("sso_cancelled", "Nexus Mods authorization was cancelled."))
+    }
+
+    signal?.addEventListener("abort", cancel, { once: true })
 
     const timeout = window.setTimeout(() => {
       fail(
@@ -80,6 +94,7 @@ export function requestNexusSsoCredential(): Promise<string> {
 
     function cleanup() {
       window.clearTimeout(timeout)
+      signal?.removeEventListener("abort", cancel)
       if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
         socket.close()
       }

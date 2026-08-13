@@ -9,7 +9,7 @@ import {
   refreshAuthSession,
   type AuthSession,
 } from "@/lib/nexus"
-import { requestNexusSsoCredential } from "@/lib/nexusSso"
+import { NexusSsoError, requestNexusSsoCredential } from "@/lib/nexusSso"
 
 export type AuthStatus = "loading" | "unauthenticated" | "authenticated"
 
@@ -17,7 +17,7 @@ interface AuthStore {
   status: AuthStatus
   session: AuthSession | null
   initialize: () => Promise<void>
-  signIn: () => Promise<void>
+  signIn: (signal?: AbortSignal) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -51,13 +51,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 
-  signIn: async () => {
+  signIn: async (signal?: AbortSignal) => {
     try {
-      const credential = await requestNexusSsoCredential()
+      const credential = await requestNexusSsoCredential(signal)
       const session = await completeSso(credential)
       set({ status: "authenticated", session })
       toast.success("Success", `Authenticated as ${session.user.name}.`)
     } catch (err) {
+      if (err instanceof NexusSsoError && err.kind === "sso_cancelled") throw err
       const { title, description } = describeAuthError(err)
       toast.error(title, description)
       throw err

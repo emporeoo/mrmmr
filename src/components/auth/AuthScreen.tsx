@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { ExternalLink, Info, Loader2, ShieldCheck } from "lucide-react"
+import { useRef, useState } from "react"
+import { ExternalLink, Info, Loader2, ShieldCheck, X } from "lucide-react"
 
 import { AppIcon } from "@/components/ui/AppIcon"
 import { Button } from "@/components/ui/button"
@@ -13,18 +13,27 @@ import { useAuthStore } from "@/store/auth"
 export function AuthScreen() {
   const signIn = useAuthStore((state) => state.signIn)
   const [authorizing, setAuthorizing] = useState(false)
+  const controllerRef = useRef<AbortController | null>(null)
   const configured = isNexusSsoConfigured()
 
   async function handleSignIn() {
     if (!configured || authorizing) return
+    const controller = new AbortController()
+    controllerRef.current = controller
     setAuthorizing(true)
     try {
-      await signIn()
+      await signIn(controller.signal)
     } catch {
       // Authentication errors are shown by the shared notification system.
     } finally {
       setAuthorizing(false)
+      controllerRef.current = null
     }
+  }
+
+  function handleCancel() {
+    controllerRef.current?.abort()
+    setAuthorizing(false)
   }
 
   return (
@@ -85,6 +94,17 @@ export function AuthScreen() {
                   ? "Continue with Nexus Mods"
                   : "Awaiting Nexus Mods registration"}
             </Button>
+            {authorizing ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleCancel}
+                className="h-9 w-full"
+              >
+                <X />
+                Cancel
+              </Button>
+            ) : null}
             <div className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
               <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
               <p>
