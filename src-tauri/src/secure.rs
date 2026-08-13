@@ -32,7 +32,7 @@ pub fn encrypt(plaintext: &str) -> Result<Vec<u8>, AuthError> {
             &mut output,
         )
     }
-    .map_err(|e| AuthError::Storage(format!("Could not encrypt API key: {e}")))?;
+    .map_err(|e| AuthError::Storage(format!("Could not encrypt credential: {e}")))?;
 
     let ciphertext =
         unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize) }.to_vec();
@@ -66,7 +66,7 @@ pub fn decrypt(ciphertext: &[u8]) -> Result<String, AuthError> {
             &mut output,
         )
     }
-    .map_err(|e| AuthError::Storage(format!("Could not decrypt API key: {e}")))?;
+    .map_err(|e| AuthError::Storage(format!("Could not decrypt credential: {e}")))?;
 
     let plaintext =
         unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize) }.to_vec();
@@ -77,5 +77,5 @@ pub fn decrypt(ciphertext: &[u8]) -> Result<String, AuthError> {
     };
 
     String::from_utf8(plaintext)
-        .map_err(|_| AuthError::Storage("Decrypted API key is not valid UTF-8".into()))
+        .map_err(|_| AuthError::Storage("Decrypted credential is not valid UTF-8".into()))
 }

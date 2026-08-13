@@ -25,7 +25,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             auth::get_auth_session,
-            auth::authenticate,
+            auth::complete_sso,
             auth::refresh_auth_session,
             auth::clear_auth,
             auth::reset_all_data,

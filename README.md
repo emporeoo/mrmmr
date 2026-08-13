@@ -55,15 +55,27 @@ Use the official GitHub release page:
 
 1. Under **Assets**, download the ZIP file.
 2. Extract the ZIP and run the EXE file.
-3. On first launch, open the Nexus Mods API key page:
-   <https://next.nexusmods.com/settings/api-keys>
-4. Scroll to the bottom of that page, copy the value under Personal API Key,
-   and paste it into MRMMR.
-5. Confirm the detected Marvel Rivals installation and install the required
-   UTOC Signature Bypass before installing mods.
+3. On first launch, select **Continue with Nexus Mods**.
+4. Sign in on the official Nexus Mods page opened by MRMMR and approve the
+   application authorization.
+5. Return to MRMMR, confirm the detected Marvel Rivals installation, and
+   install the required UTOC Signature Bypass before installing mods.
 
 Only download MRMMR from the official GitHub repository or an official Nexus
 Mods listing. Do not use repacked installers or unofficial mirrors.
+
+## Nexus Mods authentication
+
+MRMMR uses Nexus Mods SSO protocol 2 over the official SSO WebSocket. After
+the user approves MRMMR in a browser, Nexus Mods returns an
+application-scoped credential for authenticated REST and GraphQL requests.
+MRMMR does not accept manually entered credentials.
+
+The SSO implementation is ready for application registration. The assigned
+application slug is currently represented by the centralized
+`PENDING_NEXUS_APPLICATION_SLUG` placeholder in
+[`src/lib/nexusSso.ts`](src/lib/nexusSso.ts). Once Nexus Mods supplies the
+registered slug, that single value enables sign-in.
 
 ## Privacy and safety
 
@@ -74,13 +86,15 @@ MRMMR is a local-first desktop application:
 - Network requests are made directly from the application to Nexus Mods for
   account validation, workshop browsing, file metadata, and permitted
   downloads.
-- Your Nexus API key is encrypted with Windows DPAPI when it is remembered on
-  the device. It is not stored in a MRMMR server.
+- Nexus Mods authentication uses its browser-based SSO flow. MRMMR never asks
+  you to copy a credential from your account settings.
+- The application-scoped SSO credential is encrypted with Windows DPAPI and
+  stored only on your device. It is not stored on a MRMMR server.
 - Mod archives are downloaded and extracted locally. MRMMR does not rehost
   mod files.
 - Diagnostic reports are created and exported only when you choose. They do
-  not include the stored API key, and exported reports are designed to avoid
-  exposing the full local game path.
+  not include the stored Nexus authorization, and exported reports are
+  designed to avoid exposing the full local game path.
 - MRMMR does not inject into Marvel Rivals or modify game memory. Process
   checks are used for launch protection and to prevent unsafe changes while
   the game is running.
@@ -100,7 +114,8 @@ For reproducible problems, open an issue in the GitHub repository:
 
 When reporting an issue, include the MRMMR version, relevant steps to
 reproduce the problem, and the exported diagnostic report if appropriate.
-Never post API keys, access tokens, or private system information.
+Never post access tokens, authorization credentials, or private system
+information.
 
 Visit the official Nexus Mods page for MRMMR, endorse the
 work, and vote where applicable:

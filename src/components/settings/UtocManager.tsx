@@ -198,7 +198,7 @@ export function UtocManager() {
     const isPremium = session?.user.is_premium ?? false
     if (isPremium) {
       try {
-        const status = await installUtoc("")
+        const status = await installUtoc()
         finishInstall(status)
       } catch (err) {
         await handleInstallError(err)

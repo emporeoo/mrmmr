@@ -87,10 +87,10 @@ pub struct NexusUser {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", content = "message")]
 pub enum AuthError {
-    #[serde(rename = "empty_api_key")]
-    EmptyApiKey,
-    #[serde(rename = "invalid_api_key")]
-    InvalidApiKey,
+    #[serde(rename = "missing_credential")]
+    MissingCredential,
+    #[serde(rename = "invalid_credential")]
+    InvalidCredential,
     #[serde(rename = "network")]
     Network(String),
     #[serde(rename = "storage")]
@@ -99,9 +99,9 @@ pub enum AuthError {
     GameFilesLocked,
 }
 
-pub async fn validate_api_key(api_key: &str) -> Result<NexusUser, AuthError> {
-    if api_key.trim().is_empty() {
-        return Err(AuthError::EmptyApiKey);
+pub async fn validate_credential(credential: &str) -> Result<NexusUser, AuthError> {
+    if credential.trim().is_empty() {
+        return Err(AuthError::MissingCredential);
     }
     if let Some(message) = rate_limit_cooldown() {
         return Err(AuthError::Network(message));
@@ -109,7 +109,7 @@ pub async fn validate_api_key(api_key: &str) -> Result<NexusUser, AuthError> {
 
     let response = http_client()
         .get(format!("{NEXUS_BASE_URL}{VALIDATE_PATH}"))
-        .header("apikey", api_key.trim())
+        .header("apikey", credential.trim())
         .timeout(REQUEST_TIMEOUT)
         .send()
         .await
@@ -120,7 +120,7 @@ pub async fn validate_api_key(api_key: &str) -> Result<NexusUser, AuthError> {
             .json::<NexusUser>()
             .await
             .map_err(|e| AuthError::Network(format!("Unexpected response from Nexus: {e}"))),
-        401 | 403 => Err(AuthError::InvalidApiKey),
+        401 | 403 => Err(AuthError::InvalidCredential),
         429 => Err(AuthError::Network(rate_limit_message(response.headers()))),
         status => Err(AuthError::Network(format!("Nexus returned HTTP {status}"))),
     }

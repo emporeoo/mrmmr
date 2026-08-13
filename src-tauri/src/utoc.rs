@@ -134,20 +134,13 @@ pub fn uninstall_utoc(app: &AppHandle) -> Result<(), UtocError> {
 pub async fn install_utoc(
     app: AppHandle,
     state: State<'_, AuthState>,
-    api_key: Option<String>,
 ) -> Result<UtocStatus, UtocError> {
     ensure_game_files_mutable()?;
-    let api_key = match api_key {
-        Some(key) if !key.trim().is_empty() => key.trim().to_string(),
-        _ => match auth::resolve_api_key(&app, &state) {
-            Ok(key) => key,
-            Err(e) => {
-                return Err(UtocError::NotAuthenticated(format!(
-                    "No API key was passed and the stored key could not be used: {e:?}"
-                )));
-            }
-        },
-    };
+    let credential = auth::resolve_credential(&app, &state).map_err(|e| {
+        UtocError::NotAuthenticated(format!(
+            "The saved Nexus authorization could not be used: {e:?}"
+        ))
+    })?;
     let location = game::load_location(&app)
         .map_err(|e| UtocError::Storage(e.to_string()))?
         .ok_or(UtocError::GameNotFound)?;
@@ -159,7 +152,7 @@ pub async fn install_utoc(
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| UtocError::Storage(format!("Could not create temp folder: {e}")))?;
 
-    let result = install_inner(&app, &api_key, &game_path, &temp_dir, &extract_dir).await;
+    let result = install_inner(&app, &credential, &game_path, &temp_dir, &extract_dir).await;
 
     let _ = std::fs::remove_dir_all(&temp_dir);
     result
@@ -167,13 +160,13 @@ pub async fn install_utoc(
 
 async fn install_inner(
     app: &AppHandle,
-    api_key: &str,
+    credential: &str,
     game_path: &str,
     temp_dir: &Path,
     extract_dir: &Path,
 ) -> Result<UtocStatus, UtocError> {
     emit(app, "fetching_files");
-    let files = get_mod_files(api_key, UTOC_MOD_ID).await?;
+    let files = get_mod_files(credential, UTOC_MOD_ID).await?;
     let file = pick_file(&files).ok_or(UtocError::NoFiles)?;
     let archive_path = temp_dir.join(format!(
         "utoc-bypass.{}",
@@ -181,7 +174,7 @@ async fn install_inner(
     ));
 
     emit(app, "fetching_download_link");
-    let links = get_download_links(api_key, UTOC_MOD_ID, file.file_id).await?;
+    let links = get_download_links(credential, UTOC_MOD_ID, file.file_id).await?;
     let uri = links
         .first()
         .map(|link| link.uri.clone())
@@ -504,13 +497,13 @@ fn pick_file(files: &[ModFile]) -> Option<&ModFile> {
         .or_else(|| files.first())
 }
 
-async fn nexus_get(api_key: &str, url: &str) -> Result<reqwest::Response, UtocError> {
+async fn nexus_get(credential: &str, url: &str) -> Result<reqwest::Response, UtocError> {
     if let Some(message) = nexus::rate_limit_cooldown() {
         return Err(UtocError::Api(message));
     }
     let response = nexus::http_client()
         .get(url)
-        .header("apikey", api_key)
+        .header("apikey", credential)
         .timeout(REQUEST_TIMEOUT)
         .send()
         .await
@@ -541,9 +534,9 @@ async fn nexus_get(api_key: &str, url: &str) -> Result<reqwest::Response, UtocEr
     }
 }
 
-async fn get_mod_files(api_key: &str, mod_id: u32) -> Result<Vec<ModFile>, UtocError> {
+async fn get_mod_files(credential: &str, mod_id: u32) -> Result<Vec<ModFile>, UtocError> {
     let url = format!("https://api.nexusmods.com/v1/games/{GAME_DOMAIN}/mods/{mod_id}/files.json");
-    let response = nexus_get(api_key, &url).await?;
+    let response = nexus_get(credential, &url).await?;
     let parsed: FilesResponse = response
         .json()
         .await
@@ -552,14 +545,14 @@ async fn get_mod_files(api_key: &str, mod_id: u32) -> Result<Vec<ModFile>, UtocE
 }
 
 async fn get_download_links(
-    api_key: &str,
+    credential: &str,
     mod_id: u32,
     file_id: u32,
 ) -> Result<Vec<DownloadLink>, UtocError> {
     let url = format!(
         "https://api.nexusmods.com/v1/games/{GAME_DOMAIN}/mods/{mod_id}/files/{file_id}/download_link.json"
     );
-    let response = nexus_get(api_key, &url).await?;
+    let response = nexus_get(credential, &url).await?;
     response
         .json()
         .await

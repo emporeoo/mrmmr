@@ -29,8 +29,8 @@ export function getUtocStatus(): Promise<UtocStatus> {
   return invoke<UtocStatus>("utoc_status")
 }
 
-export function installUtoc(apiKey: string): Promise<UtocStatus> {
-  return invoke<UtocStatus>("install_utoc", { apiKey })
+export function installUtoc(): Promise<UtocStatus> {
+  return invoke<UtocStatus>("install_utoc")
 }
 
 export function getUtocFilesUrl(): Promise<string> {

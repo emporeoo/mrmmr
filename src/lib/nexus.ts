@@ -11,7 +11,6 @@ export interface NexusUser {
 
 export interface AuthSession {
   user: NexusUser
-  remembered: boolean
 }
 
 export type AccountTier = "free" | "supporter" | "premium"
@@ -22,15 +21,23 @@ export function accountTier(user: NexusUser): AccountTier {
   return "free"
 }
 
-export type AuthErrorKind = "empty_api_key" | "invalid_api_key" | "network" | "storage"
+export type AuthErrorKind =
+  | "missing_credential"
+  | "invalid_credential"
+  | "network"
+  | "storage"
+  | "sso_not_configured"
+  | "sso_connection"
+  | "sso_rejected"
+  | "sso_timeout"
 
 export interface AuthError {
   kind: AuthErrorKind
   message?: string
 }
 
-export function authenticate(apiKey: string, remember: boolean): Promise<AuthSession> {
-  return invoke<AuthSession>("authenticate", { apiKey, remember })
+export function completeSso(credential: string): Promise<AuthSession> {
+  return invoke<AuthSession>("complete_sso", { credential })
 }
 
 export function getAuthSession(): Promise<AuthSession | null> {
@@ -48,20 +55,40 @@ export function clearAuth(): Promise<void> {
 export function describeAuthError(err: unknown): { title: string; description: string } {
   const e = err as AuthError
   switch (e?.kind) {
-    case "invalid_api_key":
+    case "sso_not_configured":
       return {
-        title: "Failed",
-        description: "API key is not accepted. Check it and try again.",
+        title: "Registration pending",
+        description: e.message ?? "Nexus Mods has not assigned MRMMR its application slug yet.",
+      }
+    case "invalid_credential":
+      return {
+        title: "Authorization expired",
+        description: "Nexus Mods rejected this authorization. Sign in again.",
+      }
+    case "sso_timeout":
+      return {
+        title: "Sign-in timed out",
+        description: e.message ?? "Start the Nexus Mods sign-in again.",
+      }
+    case "sso_rejected":
+      return {
+        title: "Sign-in not approved",
+        description: e.message ?? "Nexus Mods did not authorize this sign-in.",
+      }
+    case "sso_connection":
+      return {
+        title: "Sign-in failed",
+        description: e.message ?? "Could not connect to Nexus Mods SSO.",
       }
     case "network":
       return {
         title: "Failed",
-        description: "Couldn't reach Nexus Mods. Check your connection and try again.",
+        description: e.message ?? "Couldn't reach Nexus Mods. Check your connection and try again.",
       }
     case "storage":
       return {
         title: "Failed",
-        description: "Couldn't save your API key on this device.",
+        description: "Couldn't save the Nexus authorization on this device.",
       }
     default:
       return {

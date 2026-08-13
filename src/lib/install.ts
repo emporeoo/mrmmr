@@ -110,11 +110,8 @@ export interface UndoStatus {
   created_at?: number | null
 }
 
-export function getModInstallOptions(
-  apiKey: string,
-  modId: number,
-): Promise<ModInstallOption[]> {
-  return invoke<ModInstallOption[]>("get_mod_install_options", { apiKey, modId })
+export function getModInstallOptions(modId: number): Promise<ModInstallOption[]> {
+  return invoke<ModInstallOption[]>("get_mod_install_options", { modId })
 }
 
 export function prepareModInstall(

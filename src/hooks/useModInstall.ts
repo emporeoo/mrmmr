@@ -177,7 +177,7 @@ export function useModInstall(
     setPhase("preparing")
     setStep("fetching_files")
     try {
-      const options = await getModInstallOptions("", modId)
+      const options = await getModInstallOptions(modId)
       setInstallOptions(options)
       setPhase("choosing-files")
       setStep(null)

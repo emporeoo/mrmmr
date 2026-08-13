@@ -539,26 +539,21 @@ fn ensure_setup(game_path: &str) -> Result<(), InstallError> {
     Ok(())
 }
 
-fn resolve_api_key(
+fn resolve_credential(
     app: &AppHandle,
     state: &State<'_, AuthState>,
-    api_key: &str,
 ) -> Result<String, InstallError> {
-    if !api_key.trim().is_empty() {
-        Ok(api_key.trim().to_string())
-    } else {
-        auth::resolve_api_key(app, state)
-            .map_err(|e| InstallError::NotAuthenticated(format!("{e:?}")))
-    }
+    auth::resolve_credential(app, state)
+        .map_err(|e| InstallError::NotAuthenticated(format!("{e:?}")))
 }
 
-async fn nexus_get_json(api_key: &str, url: &str) -> Result<serde_json::Value, InstallError> {
+async fn nexus_get_json(credential: &str, url: &str) -> Result<serde_json::Value, InstallError> {
     if let Some(message) = nexus::rate_limit_cooldown() {
         return Err(InstallError::Api(message));
     }
     let response = nexus::http_client()
         .get(url)
-        .header("apikey", api_key)
+        .header("apikey", credential)
         .timeout(REQUEST_TIMEOUT)
         .send()
         .await
@@ -588,7 +583,7 @@ async fn nexus_get_json(api_key: &str, url: &str) -> Result<serde_json::Value, I
 }
 
 async fn nexus_post_json(
-    api_key: &str,
+    credential: &str,
     url: &str,
     body: &serde_json::Value,
 ) -> Result<serde_json::Value, InstallError> {
@@ -597,7 +592,7 @@ async fn nexus_post_json(
     }
     let response = nexus::http_client()
         .post(url)
-        .header("apikey", api_key)
+        .header("apikey", credential)
         .json(body)
         .timeout(REQUEST_TIMEOUT)
         .send()
@@ -642,7 +637,7 @@ fn json_u64(value: Option<&serde_json::Value>) -> Option<u64> {
 }
 
 async fn get_indexed_archive_contents(
-    api_key: &str,
+    credential: &str,
     file_ids: &[u32],
 ) -> Result<HashMap<u32, Vec<IndexedArchiveContent>>, InstallError> {
     const GRAPHQL_URL: &str = "https://api.nexusmods.com/v2/graphql";
@@ -669,7 +664,7 @@ async fn get_indexed_archive_contents(
     let mut offset = 0_u64;
     for _ in 0..MAX_PAGES {
         let response = nexus_post_json(
-            api_key,
+            credential,
             GRAPHQL_URL,
             &serde_json::json!({
                 "query": QUERY,
@@ -748,7 +743,7 @@ async fn get_indexed_archive_contents(
     ))
 }
 
-async fn get_mod_info(api_key: &str, mod_id: u32) -> Result<ModInfo, InstallError> {
+async fn get_mod_info(credential: &str, mod_id: u32) -> Result<ModInfo, InstallError> {
     if let Some((cached_at, info)) = mod_info_cache()
         .lock()
         .expect("mod info cache mutex poisoned")
@@ -759,7 +754,7 @@ async fn get_mod_info(api_key: &str, mod_id: u32) -> Result<ModInfo, InstallErro
         }
     }
     let url = format!("{BASE_URL}/{GAME_DOMAIN}/mods/{mod_id}.json");
-    let value = nexus_get_json(api_key, &url).await?;
+    let value = nexus_get_json(credential, &url).await?;
     let info: ModInfo = serde_json::from_value(value)
         .map_err(|e| InstallError::Api(format!("Invalid mod info: {e}")))?;
     let mut cache = mod_info_cache()
@@ -770,7 +765,7 @@ async fn get_mod_info(api_key: &str, mod_id: u32) -> Result<ModInfo, InstallErro
     Ok(info)
 }
 
-async fn get_mod_files(api_key: &str, mod_id: u32) -> Result<Vec<ModFile>, InstallError> {
+async fn get_mod_files(credential: &str, mod_id: u32) -> Result<Vec<ModFile>, InstallError> {
     if let Some((cached_at, files)) = mod_files_cache()
         .lock()
         .expect("mod files cache mutex poisoned")
@@ -781,7 +776,7 @@ async fn get_mod_files(api_key: &str, mod_id: u32) -> Result<Vec<ModFile>, Insta
         }
     }
     let url = format!("{BASE_URL}/{GAME_DOMAIN}/mods/{mod_id}/files.json");
-    let value = nexus_get_json(api_key, &url).await?;
+    let value = nexus_get_json(credential, &url).await?;
     let parsed: FilesResponse = serde_json::from_value(value)
         .map_err(|e| InstallError::Api(format!("Invalid files: {e}")))?;
     let mut cache = mod_files_cache()
@@ -841,14 +836,14 @@ fn archive_md5(path: &Path) -> Result<String, InstallError> {
 }
 
 async fn verify_archive_identity(
-    api_key: &str,
+    credential: &str,
     mod_id: u32,
     archive_path: &Path,
     expected_file_ids: Option<&[u32]>,
 ) -> Result<ArchiveIdentity, InstallError> {
     let md5 = archive_md5(archive_path)?;
     let url = format!("{BASE_URL}/{GAME_DOMAIN}/mods/md5_search/{md5}.json");
-    let value = nexus_get_json(api_key, &url).await?;
+    let value = nexus_get_json(credential, &url).await?;
 
     if let Some(identity) = extract_archive_identity(&value, mod_id, &md5) {
         return Ok(identity);
@@ -856,7 +851,7 @@ async fn verify_archive_identity(
 
     // Nexus' global MD5 index can lag behind or omit valid files. The mod's
     // own file list is authoritative and provides a reliable fallback.
-    let files = get_mod_files(api_key, mod_id).await?;
+    let files = get_mod_files(credential, mod_id).await?;
     files
         .into_iter()
         .find(|file| {
@@ -911,12 +906,12 @@ fn extract_archive_identity(
 }
 
 async fn get_download_links(
-    api_key: &str,
+    credential: &str,
     mod_id: u32,
     file_id: u32,
 ) -> Result<Vec<DownloadLink>, InstallError> {
     let url = format!("{BASE_URL}/{GAME_DOMAIN}/mods/{mod_id}/files/{file_id}/download_link.json");
-    let value = nexus_get_json(api_key, &url).await?;
+    let value = nexus_get_json(credential, &url).await?;
     serde_json::from_value(value)
         .map_err(|e| InstallError::Api(format!("Invalid download links: {e}")))
 }
@@ -1219,11 +1214,10 @@ fn enrich_install_options(
 pub async fn get_mod_install_options(
     app: AppHandle,
     state: State<'_, AuthState>,
-    api_key: String,
     mod_id: u32,
 ) -> Result<Vec<ModInstallOption>, InstallError> {
-    let api_key = resolve_api_key(&app, &state, &api_key)?;
-    let files = get_mod_files(&api_key, mod_id).await?;
+    let credential = resolve_credential(&app, &state)?;
+    let files = get_mod_files(&credential, mod_id).await?;
     let mut options = install_options(&files);
     if options.is_empty() {
         Err(InstallError::NoFiles)
@@ -1232,7 +1226,7 @@ pub async fn get_mod_install_options(
             .iter()
             .flat_map(|option| option.files.iter().map(|file| file.file_id))
             .collect();
-        if let Ok(indexed) = get_indexed_archive_contents(&api_key, &file_ids).await {
+        if let Ok(indexed) = get_indexed_archive_contents(&credential, &file_ids).await {
             enrich_install_options(&app, mod_id, &mut options, &indexed)?;
         }
         Ok(options)
@@ -1492,7 +1486,7 @@ fn modified_at_millis(metadata: &std::fs::Metadata) -> u128 {
 async fn prepare_archive_install(
     app: &AppHandle,
     conflict_state: &AssetConflictState,
-    api_key: &str,
+    credential: &str,
     request: PrepareArchiveRequest,
 ) -> Result<PreparedInstall, InstallError> {
     if request.source_archives.is_empty() || request.source_archives.len() > 8 {
@@ -1513,7 +1507,7 @@ async fn prepare_archive_install(
             for archive in &request.source_archives {
                 identities.push(
                     verify_archive_identity(
-                        api_key,
+                        credential,
                         request.mod_id,
                         archive,
                         request.expected_file_ids.as_deref(),
@@ -1588,7 +1582,7 @@ async fn prepare_archive_install(
     .map_err(|error| {
         InstallError::Install(format!("Archive extraction worker stopped: {error}"))
     })??;
-    let info = get_mod_info(api_key, request.mod_id)
+    let info = get_mod_info(credential, request.mod_id)
         .await
         .unwrap_or_else(|_| ModInfo {
             name: format!("Mod {}", request.mod_id),
@@ -1673,7 +1667,7 @@ pub async fn prepare_mod_install(
     mod_id: u32,
     file_ids: Option<Vec<u32>>,
 ) -> Result<InstallPreview, InstallError> {
-    let api_key = resolve_api_key(&app, &auth_state, "")?;
+    let credential = resolve_credential(&app, &auth_state)?;
     let location = game::load_location(&app)
         .map_err(|error| InstallError::Storage(error.to_string()))?
         .ok_or(InstallError::GameNotFound)?;
@@ -1684,7 +1678,7 @@ pub async fn prepare_mod_install(
         .map_err(|error| InstallError::Storage(format!("Could not create temp folder: {error}")))?;
     let result = async {
         emit(&app, "fetching_files");
-        let files = get_mod_files(&api_key, mod_id).await?;
+        let files = get_mod_files(&credential, mod_id).await?;
         let selected_ids = file_ids.unwrap_or_else(|| {
             pick_file(&files)
                 .map(|file| vec![file.file_id])
@@ -1721,7 +1715,7 @@ pub async fn prepare_mod_install(
                 utoc::archive_extension_from_name(file.file_name.as_deref())
             ));
             emit(&app, "fetching_download_link");
-            let uri = get_download_links(&api_key, mod_id, file.file_id)
+            let uri = get_download_links(&credential, mod_id, file.file_id)
                 .await?
                 .first()
                 .map(|link| link.uri.clone())
@@ -1750,7 +1744,7 @@ pub async fn prepare_mod_install(
         prepare_archive_install(
             &app,
             &conflict_state,
-            &api_key,
+            &credential,
             PrepareArchiveRequest {
                 mod_id,
                 game_path: location.path,
@@ -1785,7 +1779,7 @@ pub async fn prepare_mod_install_from_archive(
     archive_paths: Vec<String>,
     file_ids: Option<Vec<u32>>,
 ) -> Result<InstallPreview, InstallError> {
-    let api_key = resolve_api_key(&app, &auth_state, "")?;
+    let credential = resolve_credential(&app, &auth_state)?;
     let location = game::load_location(&app)
         .map_err(|error| InstallError::Storage(error.to_string()))?
         .ok_or(InstallError::GameNotFound)?;
@@ -1795,7 +1789,7 @@ pub async fn prepare_mod_install_from_archive(
     let result = prepare_archive_install(
         &app,
         &conflict_state,
-        &api_key,
+        &credential,
         PrepareArchiveRequest {
             mod_id,
             game_path: location.path,
@@ -3186,12 +3180,12 @@ pub async fn check_mod_updates(
     app: AppHandle,
     state: State<'_, AuthState>,
 ) -> Result<Vec<ModUpdate>, InstallError> {
-    let api_key = resolve_api_key(&app, &state, "")?;
+    let credential = resolve_credential(&app, &state)?;
     let mods = get_installed_mods(app.clone())?;
 
     let mut updates = Vec::new();
     for installed in mods {
-        let info = get_mod_info(&api_key, installed.mod_id).await.ok();
+        let info = get_mod_info(&credential, installed.mod_id).await.ok();
         let latest = info
             .as_ref()
             .map(|info| info.version.clone())
@@ -3221,8 +3215,8 @@ pub async fn detect_mod_download(
     file_ids: Vec<u32>,
 ) -> Result<Option<String>, InstallError> {
     const RECENT: std::time::Duration = std::time::Duration::from_secs(600);
-    let api_key = resolve_api_key(&app, &state, "")?;
-    let expected_hashes: HashSet<String> = get_mod_files(&api_key, mod_id)
+    let credential = resolve_credential(&app, &state)?;
+    let expected_hashes: HashSet<String> = get_mod_files(&credential, mod_id)
         .await?
         .into_iter()
         .filter(|file| file_ids.is_empty() || file_ids.contains(&file.file_id))

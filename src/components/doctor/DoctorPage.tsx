@@ -76,7 +76,10 @@ export function DoctorPage() {
     setExporting(true)
     try {
       await exportDiagnostics(destination)
-      toast.success("Diagnostics exported", "The report excludes your API key and full game path.")
+      toast.success(
+        "Diagnostics exported",
+        "The report excludes your Nexus authorization and full game path.",
+      )
     } catch (error) {
       const detail = describeDoctorError(error)
       toast.error(detail.title, detail.description)

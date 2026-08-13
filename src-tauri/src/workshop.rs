@@ -149,15 +149,16 @@ struct GraphQlCategory {
     name: String,
 }
 
-pub(crate) fn resolve_key(
+pub(crate) fn resolve_credential(
     app: &AppHandle,
     state: &State<'_, AuthState>,
 ) -> Result<String, WorkshopError> {
-    auth::resolve_api_key(app, state).map_err(|e| WorkshopError::NotAuthenticated(format!("{e:?}")))
+    auth::resolve_credential(app, state)
+        .map_err(|e| WorkshopError::NotAuthenticated(format!("{e:?}")))
 }
 
 pub(crate) async fn nexus_get_json(
-    api_key: &str,
+    credential: &str,
     url: &reqwest::Url,
 ) -> Result<serde_json::Value, WorkshopError> {
     if let Some(message) = nexus::rate_limit_cooldown() {
@@ -165,7 +166,7 @@ pub(crate) async fn nexus_get_json(
     }
     let response = nexus::http_client()
         .get(url.clone())
-        .header("apikey", api_key)
+        .header("apikey", credential)
         .timeout(REQUEST_TIMEOUT)
         .send()
         .await
@@ -243,13 +244,13 @@ pub async fn browse_mods(
     state: State<'_, AuthState>,
     request: BrowseRequest,
 ) -> Result<BrowsePage, WorkshopError> {
-    let api_key = resolve_key(&app, &state)?;
+    let credential = resolve_credential(&app, &state)?;
     if let Some(message) = nexus::rate_limit_cooldown() {
         return Err(WorkshopError::Api(message));
     }
     let response = nexus::http_client()
         .post(GRAPHQL_URL)
-        .header("apikey", api_key)
+        .header("apikey", credential)
         .header("Accept", "application/json")
         .json(&serde_json::json!({
             "query": BROWSE_QUERY,
@@ -345,7 +346,7 @@ pub async fn get_mod_categories(
     app: AppHandle,
     state: State<'_, AuthState>,
 ) -> Result<Vec<ModCategory>, WorkshopError> {
-    let api_key = resolve_key(&app, &state)?;
+    let credential = resolve_credential(&app, &state)?;
     if let Some((cached_at, categories)) = category_cache()
         .lock()
         .expect("category cache mutex poisoned")
@@ -358,7 +359,7 @@ pub async fn get_mod_categories(
     let url = reqwest::Url::parse(&format!("{V1_BASE_URL}/{GAME_DOMAIN}.json"))
         .map_err(|e| WorkshopError::Api(format!("Invalid URL: {e}")))?;
 
-    let mut categories = extract_categories(&nexus_get_json(&api_key, &url).await?);
+    let mut categories = extract_categories(&nexus_get_json(&credential, &url).await?);
     categories.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     if !categories.is_empty() {
         *category_cache()

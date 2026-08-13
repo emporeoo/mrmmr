@@ -2501,7 +2501,7 @@ dependencies = [
 
 [[package]]
 name = "mrmmr"
-version = "0.6.1"
+version = "0.6.5"
 dependencies = [
  "flate2",
  "md-5",

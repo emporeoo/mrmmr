@@ -12,18 +12,17 @@ use crate::storage;
 use crate::utoc;
 
 const PROFILE_FILE: &str = "auth.json";
-const KEY_FILE: &str = "auth.key";
+const CREDENTIAL_FILE: &str = "auth.token";
+const LEGACY_CREDENTIAL_FILE: &str = "auth.key";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthSession {
     #[serde(skip_serializing)]
-    pub api_key: String,
+    pub credential: String,
     pub user: NexusUser,
-    pub remembered: bool,
 }
 
-/// Non-sensitive data persisted to disk. The API key itself is stored as a
-/// DPAPI-encrypted blob (see [`crate::secure`]), never as plaintext.
+/// Non-sensitive account data stored alongside the encrypted SSO credential.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct StoredProfile {
     user: NexusUser,
@@ -42,8 +41,12 @@ fn profile_path(dir: &Path) -> PathBuf {
     dir.join(PROFILE_FILE)
 }
 
-fn key_path(dir: &Path) -> PathBuf {
-    dir.join(KEY_FILE)
+fn credential_path(dir: &Path) -> PathBuf {
+    dir.join(CREDENTIAL_FILE)
+}
+
+fn legacy_credential_path(dir: &Path) -> PathBuf {
+    dir.join(LEGACY_CREDENTIAL_FILE)
 }
 
 fn ensure_dir(dir: &Path) -> Result<(), AuthError> {
@@ -58,14 +61,9 @@ fn load_profile(dir: &Path) -> Result<Option<StoredProfile>, AuthError> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(AuthError::Storage(format!("Could not read auth file: {e}"))),
     };
-    let profile: StoredProfile = serde_json::from_str(&contents)
-        .map_err(|e| AuthError::Storage(format!("Could not parse auth file: {e}")))?;
-    // Scrub the legacy plaintext key once, without rewriting the profile on
-    // every cold start.
-    if contents.contains("\"key\"") {
-        save_profile(dir, &profile)?;
-    }
-    Ok(Some(profile))
+    serde_json::from_str(&contents)
+        .map(Some)
+        .map_err(|e| AuthError::Storage(format!("Could not parse auth file: {e}")))
 }
 
 fn save_profile(dir: &Path, profile: &StoredProfile) -> Result<(), AuthError> {
@@ -73,33 +71,42 @@ fn save_profile(dir: &Path, profile: &StoredProfile) -> Result<(), AuthError> {
         .map_err(|e| AuthError::Storage(format!("Could not write auth file: {e}")))
 }
 
-fn delete_profile(dir: &Path) {
-    let _ = std::fs::remove_file(profile_path(dir));
+fn save_credential(dir: &Path, credential: &str) -> Result<(), AuthError> {
+    let ciphertext = secure::encrypt(credential)?;
+    storage::write_bytes_atomic(&credential_path(dir), &ciphertext)
+        .map_err(|e| AuthError::Storage(format!("Could not write authorization file: {e}")))
 }
 
-fn save_key(dir: &Path, api_key: &str) -> Result<(), AuthError> {
-    let ciphertext = secure::encrypt(api_key)?;
-    storage::write_bytes_atomic(&key_path(dir), &ciphertext)
-        .map_err(|e| AuthError::Storage(format!("Could not write key file: {e}")))
-}
-
-fn load_key(dir: &Path) -> Result<Option<String>, AuthError> {
-    let ciphertext = match std::fs::read(key_path(dir)) {
+fn load_credential(dir: &Path) -> Result<Option<String>, AuthError> {
+    let ciphertext = match std::fs::read(credential_path(dir)) {
         Ok(ciphertext) => ciphertext,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(AuthError::Storage(format!("Could not read key file: {e}"))),
+        Err(e) => {
+            return Err(AuthError::Storage(format!(
+                "Could not read authorization file: {e}"
+            )))
+        }
     };
     secure::decrypt(&ciphertext).map(Some)
 }
 
-fn delete_key(dir: &Path) {
-    let _ = std::fs::remove_file(key_path(dir));
+fn delete_file(path: PathBuf) {
+    let _ = std::fs::remove_file(path);
+}
+
+fn remove_persisted(app: &AppHandle) {
+    if let Ok(dir) = config_dir(app) {
+        delete_file(credential_path(&dir));
+        delete_file(legacy_credential_path(&dir));
+        delete_file(profile_path(&dir));
+    }
 }
 
 fn persist_session(app: &AppHandle, session: &AuthSession) -> Result<(), AuthError> {
     let dir = config_dir(app)?;
     ensure_dir(&dir)?;
-    save_key(&dir, &session.api_key)?;
+    save_credential(&dir, &session.credential)?;
+    delete_file(legacy_credential_path(&dir));
     save_profile(
         &dir,
         &StoredProfile {
@@ -108,93 +115,85 @@ fn persist_session(app: &AppHandle, session: &AuthSession) -> Result<(), AuthErr
     )
 }
 
-fn remove_persisted(app: &AppHandle) {
-    if let Ok(dir) = config_dir(app) {
-        delete_key(&dir);
-        delete_profile(&dir);
-    }
-}
-
 fn set_session(state: &State<'_, AuthState>, session: Option<AuthSession>) {
     *state.0.lock().expect("auth state mutex poisoned") = session;
 }
 
-pub fn current_api_key(state: &State<'_, AuthState>) -> Option<String> {
+pub fn current_credential(state: &State<'_, AuthState>) -> Option<String> {
     state
         .0
         .lock()
         .expect("auth state mutex poisoned")
         .as_ref()
-        .map(|session| session.api_key.clone())
+        .map(|session| session.credential.clone())
 }
 
-/// Resolve the API key from the in-memory session, falling back to the
-/// persisted credential so that commands work even before the session has
-/// been fully restored into memory.
-pub fn resolve_api_key(app: &AppHandle, state: &State<'_, AuthState>) -> Result<String, AuthError> {
-    if let Some(api_key) = current_api_key(state) {
-        return Ok(api_key);
+/// Resolve the application-scoped SSO credential from memory or encrypted storage.
+pub fn resolve_credential(
+    app: &AppHandle,
+    state: &State<'_, AuthState>,
+) -> Result<String, AuthError> {
+    if let Some(credential) = current_credential(state) {
+        return Ok(credential);
     }
     let dir = config_dir(app)?;
-    match load_key(&dir)? {
-        Some(api_key) => Ok(api_key),
-        None => Err(AuthError::EmptyApiKey),
-    }
+    load_credential(&dir)?.ok_or(AuthError::MissingCredential)
 }
 
 fn session_from_storage(
     app: &AppHandle,
     state: &State<'_, AuthState>,
 ) -> Result<Option<AuthSession>, AuthError> {
-    let in_memory = state.0.lock().expect("auth state mutex poisoned").clone();
-    if let Some(session) = in_memory {
+    if let Some(session) = state.0.lock().expect("auth state mutex poisoned").clone() {
         return Ok(Some(session));
     }
 
     let dir = config_dir(app)?;
+    // Never carry the credential file used by pre-SSO releases into this flow.
+    delete_file(legacy_credential_path(&dir));
     let profile = match load_profile(&dir)? {
         Some(profile) => profile,
         None => return Ok(None),
     };
 
-    let api_key = match load_key(&dir)? {
-        Some(key) => key,
+    let credential = match load_credential(&dir)? {
+        Some(credential) => credential,
         None => {
-            // Stale profile without a stored key — clear it.
-            delete_profile(&dir);
+            // Versions before SSO stored a manually supplied credential. Public
+            // builds must not reuse it, so remove that legacy state.
+            delete_file(legacy_credential_path(&dir));
+            delete_file(profile_path(&dir));
             return Ok(None);
         }
     };
 
     let session = AuthSession {
-        api_key,
+        credential,
         user: profile.user,
-        remembered: true,
     };
     set_session(state, Some(session.clone()));
     Ok(Some(session))
 }
 
+/// Complete the Nexus SSO flow after the official service returns the
+/// application-scoped credential through its WebSocket connection.
 #[tauri::command]
-pub async fn authenticate(
+pub async fn complete_sso(
     app: AppHandle,
     state: State<'_, AuthState>,
-    api_key: String,
-    remember: bool,
+    credential: String,
 ) -> Result<AuthSession, AuthError> {
-    let user = nexus::validate_api_key(&api_key).await?;
-    let session = AuthSession {
-        api_key: api_key.trim().to_string(),
-        user,
-        remembered: remember,
-    };
-
-    if remember {
-        persist_session(&app, &session)?;
-    } else {
-        remove_persisted(&app);
+    let credential = credential.trim();
+    if credential.is_empty() {
+        return Err(AuthError::MissingCredential);
     }
 
+    let user = nexus::validate_credential(credential).await?;
+    let session = AuthSession {
+        credential: credential.to_string(),
+        user,
+    };
+    persist_session(&app, &session)?;
     set_session(&state, Some(session.clone()));
     Ok(session)
 }
@@ -217,9 +216,9 @@ pub async fn refresh_auth_session(
         None => return Ok(None),
     };
 
-    let user = match nexus::validate_api_key(&session.api_key).await {
+    let user = match nexus::validate_credential(&session.credential).await {
         Ok(user) => user,
-        Err(AuthError::InvalidApiKey) => {
+        Err(AuthError::InvalidCredential) => {
             remove_persisted(&app);
             set_session(&state, None);
             return Ok(None);
@@ -228,9 +227,7 @@ pub async fn refresh_auth_session(
     };
 
     let updated = AuthSession { user, ..session };
-    if updated.remembered {
-        persist_session(&app, &updated)?;
-    }
+    persist_session(&app, &updated)?;
     set_session(&state, Some(updated.clone()));
     Ok(Some(updated))
 }
@@ -243,7 +240,7 @@ pub fn clear_auth(app: AppHandle, state: State<'_, AuthState>) -> Result<(), Aut
 }
 
 /// Factory reset: uninstall the UTOC bypass, remove downloaded mods, forget the
-/// game location, and remove the saved credentials.
+/// game location, and remove the saved Nexus authorization.
 #[tauri::command]
 pub fn reset_all_data(app: AppHandle, state: State<'_, AuthState>) -> Result<(), AuthError> {
     game::ensure_game_files_mutable().map_err(|error| match error {
@@ -269,36 +266,35 @@ mod tests {
 
     #[test]
     fn dpapi_round_trip() {
-        let key = "some-personal-api-key-123";
-        let ciphertext = secure::encrypt(key).unwrap();
-        assert_ne!(ciphertext, key.as_bytes());
-        assert_eq!(secure::decrypt(&ciphertext).unwrap(), key);
+        let credential = "application-scoped-sso-credential";
+        let ciphertext = secure::encrypt(credential).unwrap();
+        assert_ne!(ciphertext, credential.as_bytes());
+        assert_eq!(secure::decrypt(&ciphertext).unwrap(), credential);
     }
 
     #[test]
-    fn dpapi_file_round_trip() {
+    fn encrypted_credential_file_round_trip() {
         let dir = test_dir();
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
-        let key = "some-personal-api-key-123";
-        save_key(&dir, key).unwrap();
-        assert_eq!(load_key(&dir).unwrap(), Some(key.to_string()));
+        let credential = "application-scoped-sso-credential";
+        save_credential(&dir, credential).unwrap();
+        assert_eq!(load_credential(&dir).unwrap(), Some(credential.to_string()));
 
-        // The key file must not contain the plaintext.
-        let on_disk = std::fs::read(key_path(&dir)).unwrap();
-        assert_ne!(on_disk, key.as_bytes());
+        let on_disk = std::fs::read(credential_path(&dir)).unwrap();
+        assert_ne!(on_disk, credential.as_bytes());
 
-        delete_key(&dir);
-        assert_eq!(load_key(&dir).unwrap(), None);
+        delete_file(credential_path(&dir));
+        assert_eq!(load_credential(&dir).unwrap(), None);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn auth_session_never_serializes_the_api_key() {
+    fn auth_session_never_serializes_the_credential() {
         let session = AuthSession {
-            api_key: "secret".to_string(),
+            credential: "secret".to_string(),
             user: NexusUser {
                 user_id: 7,
                 name: "Modder".to_string(),
@@ -307,10 +303,9 @@ mod tests {
                 is_supporter: false,
                 is_admin: false,
             },
-            remembered: true,
         };
         let value = serde_json::to_value(session).unwrap();
-        assert!(value.get("api_key").is_none());
+        assert!(value.get("credential").is_none());
         assert_eq!(value["user"]["is_premium"], true);
     }
 }
