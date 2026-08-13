@@ -71,12 +71,6 @@ the user approves MRMMR in a browser, Nexus Mods returns an
 application-scoped credential for authenticated REST and GraphQL requests.
 MRMMR does not accept manually entered credentials.
 
-The SSO implementation is ready for application registration. The assigned
-application slug is currently represented by the centralized
-`PENDING_NEXUS_APPLICATION_SLUG` placeholder in
-[`src/lib/nexusSso.ts`](src/lib/nexusSso.ts). Once Nexus Mods supplies the
-registered slug, that single value enables sign-in.
-
 ## Privacy and safety
 
 MRMMR is a local-first desktop application:

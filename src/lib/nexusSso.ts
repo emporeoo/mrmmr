@@ -4,9 +4,8 @@ const NEXUS_SSO_SOCKET_URL = "wss://sso.nexusmods.com"
 const NEXUS_SSO_AUTHORIZE_URL = "https://www.nexusmods.com/sso"
 const SSO_TIMEOUT_MS = 5 * 60 * 1000
 
-// Nexus Mods will replace this registration placeholder with MRMMR's assigned
-// application slug. Do not borrow another application's slug.
-export const NEXUS_SSO_APPLICATION_SLUG = "PENDING_NEXUS_APPLICATION_SLUG"
+export const NEXUS_SSO_APPLICATION_SLUG =
+  import.meta.env.VITE_NEXUS_SSO_APPLICATION_SLUG?.trim() ?? ""
 
 type NexusSsoErrorKind =
   | "sso_not_configured"
